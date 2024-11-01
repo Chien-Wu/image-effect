@@ -1,37 +1,45 @@
+import imageio
+import os
+import cv2
 from PIL import Image, ImageDraw
 import numpy as np
 
-def pixelate_and_draw(image_path, output_path, block_size=10, max_circle_radius=5):
-    # 打開圖片並轉換為灰度模式
-    img = Image.open(image_path).convert('L')
-    width, height = img.size
+INPUT_VIDEO = "input_video.mov"
+OUTPUT_VIDEO = "output_video.mov"
+BLOCK_SIZE = 10
+MAX_CIRCLE_RADIUS = 5
+COLOR_DARK = '#00008B'  # 深藍色
+COLOR_LIGHT = '#FFC0CB'  # 粉紅色
 
-    # 新建一個相同大小的彩色圖片作為背景
-    new_img = Image.new("RGB", (width, height), "white")
+print("檔案存在:", os.path.isfile(INPUT_VIDEO))
+
+def process_frame(frame, block_size=10, max_circle_radius=5):
+    # 將 BGR 轉為灰度
+    frame_bgr = frame[:, :, ::-1]
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape
+    new_img = Image.new("RGB", (width, height), COLOR_LIGHT)
     draw = ImageDraw.Draw(new_img)
 
-    # 將圖片轉為 numpy 陣列
-    img_array = np.array(img)
-
-    # 將圖片分成 block_size x block_size 的區塊
+    img_array = np.array(gray)
     for y in range(0, height, block_size):
         for x in range(0, width, block_size):
-            # 計算區塊內的平均亮度
             block = img_array[y:y+block_size, x:x+block_size]
             brightness = np.mean(block)
-
-            # 根據亮度計算圓圈的半徑
             radius = max_circle_radius * (1 - brightness / 255)
-
-            # 計算圓圈的中心點
             center = (x + block_size // 2, y + block_size // 2)
-
-            # 畫出實心圓圈
             draw.ellipse(
                 (center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius),
-                fill="black"
+                fill=COLOR_DARK
             )
+    return cv2.cvtColor(np.array(new_img), cv2.COLOR_RGB2BGR)
 
-    new_img.save(output_path)
+# 使用 imageio 讀取影片並逐幀處理
+reader = imageio.get_reader(INPUT_VIDEO, 'ffmpeg')
+writer = imageio.get_writer(OUTPUT_VIDEO, fps=8)
 
-pixelate_and_draw("input_image.jpg", "output_image.jpg", block_size=10, max_circle_radius=5)
+for frame in reader:
+    processed_frame = process_frame(frame, BLOCK_SIZE, MAX_CIRCLE_RADIUS)
+    writer.append_data(processed_frame)
+
+writer.close()
